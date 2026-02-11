@@ -8,16 +8,24 @@ const PORT = process.env.PORT || 3000;
 
 async function bootstrap() {
   try {
+    // 1. Inicia a sessão 
     await wppService.init();
-    console.log("WhatsApp Conectado!");
     
-    setupWorker(); // Inicia o vigilante do banco de dados
+    // 2. Inicia o Worker de envio
+    setupWorker();
     
+    // 3. Inicia o Servidor Express
     app.listen(PORT, () => {
-      console.log(`Servidor pronto em http://localhost:${PORT}`);
+      console.log(`
+       SISTEMA ONLINE (VERSÃO SIMPLES)
+       WhatsApp: Iniciado
+       Worker: Ativo
+       Dashboard: http://localhost:${PORT}
+      `);
     });
   } catch (err) {
-    console.error("Falha no bootstrap:", err);
+    console.error("Falha crítica no início do sistema:", err);
+    process.exit(1);
   }
 }
 

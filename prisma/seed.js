@@ -3,26 +3,45 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Limpa dados antigos para teste
-  await prisma.messageQueue.deleteMany();
-  await prisma.flowExecution.deleteMany();
-  await prisma.flowStep.deleteMany();
-  await prisma.flow.deleteMany();
+  console.log("Iniciando Seed...");
 
-  const flow = await prisma.flow.create({
-    data: {
-      name: 'Fluxo para Teste',
+  // Usamos upsert para não dar erro se você rodar o script duas vezes
+  const flow = await prisma.flow.upsert({
+    where: { id: "1" }, // ID como STRING
+    update: {},
+    create: {
+      id: "1", // ID como STRING
+      name: "Fluxo de Boas-Vindas Sequencial",
       steps: {
         create: [
-          { message: 'Olá! Essa é a primeira mensagem do fluxo.', order: 1, delayMinutes: 0 },
-          { message: 'Ainda está por aí? Segunda mensagem do fluxo.', order: 2, delayMinutes: 2 },
-          { message: 'Finalmente! Última mensagem do fluxo. Obrigado por participar!', order: 3, delayMinutes: 5 }
+          {
+            order: 1,
+            message: "Olá {nome}! Você acabou de entrar no nosso fluxo.",
+            delayMinutes: 0
+          },
+          {
+            order: 2,
+            message: "Ainda está aí? Faz 2 minutos que conversamos. Tudo bem?",
+            delayMinutes: 2
+          },
+          {
+            order: 3,
+            message: "Última mensagem do fluxo após 5 minutos. Obrigado por estar conosco!",
+            delayMinutes: 5
+          }
         ]
       }
     }
   });
 
-  console.log('Fluxo criado com sucesso!');
+  console.log("Seed finalizado com sucesso! Fluxo ID 1 criado.");
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

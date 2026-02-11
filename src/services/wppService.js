@@ -1,5 +1,6 @@
 // src/services/wppService.js
 import { create } from '@wppconnect-team/wppconnect';
+import path from 'path';
 
 class WppService {
   constructor() {
@@ -8,52 +9,81 @@ class WppService {
 
   async init() {
     try {
+      console.log(`[WPP] Inicializando sessão única...`);
+
       this.client = await create({
         session: 'whatsapp-automation',
-        catchQR: (base64Qr, asciiQR) => console.log(asciiQR),
-        qrcode: { small: true },
+        catchQR: (base64Qr, asciiQR) => {
+          console.log(`\n--- ESCANEIE O QR CODE ABAIXO ---`);
+          console.log(asciiQR);
+        },
+        statusFind: (status) => console.log(`[WPP] Status atual:`, status),
         headless: true,
-        debug: false,
-        waitForLogin: true,
-        disableWelcome: true, 
-        updatesLog: false,     
-        autoClose: 0,         
-        tokenStore: 'file',  
+        useChrome: true,
+        tokenStore: 'file',
+        folderNameToken: path.resolve('tokens'),
+        puppeteerOptions: {
+          userDataDir: path.resolve('tokens', 'browser-data'),
+        },
       });
-      return this.client;
+
+      console.log(`[WPP] WhatsApp Conectado com Sucesso!`);
     } catch (error) {
-      console.error('Erro ao iniciar WhatsApp:', error);
-      throw error;
+      console.error(`[WPP] Erro ao iniciar WhatsApp:`, error.message);
     }
   }
 
-  async sendMessage(to, message) {
-    if (!this.client) throw new Error('WhatsApp não conectado');
-    let cleanNumber = to.replace(/\D/g, '');
-
+  // Método interno para tentar validar e enviar para um formato específico
+  async _tryValidateAndSend(number, message) {
     try {
-      const contact = await this.client.checkNumberStatus(`${cleanNumber}@c.us`);
-      
-      if (contact && contact.numberExists) {
-        const targetId = contact.id._serialized;
-        console.log(`Enviando para ID validado: ${targetId}`);
-        
-        // Tentamos o envio
-        const result = await this.client.sendText(targetId, message, { waitForAck: false });
-        return result;
-      } else {
-        throw new Error('Número não existe no WhatsApp');
-      }
-    } catch (error) {
-      // Se o erro for "Message not found", mas o número é válido, considera-se como enviado (bypass de erro de sincronização)
-      if (error.message.includes('not found') || error.message.includes('LID')) {
-        console.log(`Mensagem enviada (confirmado via bypass de erro de sincronização).`);
-        return { status: 'success', bypass: true };
-      }
+      const jid = number.includes('@c.us') ? number : `${number}@c.us`;
+      console.log(`[WPP] Validando formato: ${jid}`);
 
-      console.error(`Falha no envio para ${cleanNumber}:`, error.message);
-      throw error;
+      const check = await this.client.checkNumberStatus(jid);
+
+      // Verificação rigorosa para evitar erro de "undefined"
+      if (check && check.canReceiveMessage && check.id && check.id._serialized) {
+        console.log(`[WPP] ID encontrado: ${check.id._serialized}. Enviando...`);
+        return await this.client.sendText(check.id._serialized, message);
+      }
+      
+      return null;
+    } catch (err) {
+      console.error(`[WPP] Falha na tentativa para ${number}: ${err.message}`);
+      return null;
     }
+  }
+
+  async sendMessage(phone, message) {
+    if (!this.client) throw new Error(`WhatsApp não inicializado.`);
+
+    let cleanNumber = String(phone).replace(/\D/g, '');
+    if (!cleanNumber.startsWith('55')) cleanNumber = '55' + cleanNumber;
+
+    let result = await this._tryValidateAndSend(cleanNumber, message);
+
+    if (!result && cleanNumber.startsWith('55')) {
+      const alternative = cleanNumber.length > 12
+        ? cleanNumber.slice(0, 4) + cleanNumber.slice(5)
+        : cleanNumber.slice(0, 4) + '9' + cleanNumber.slice(4);
+      
+      console.log(`[WPP] Tentando alternativa validada: ${alternative}`);
+      result = await this._tryValidateAndSend(alternative, message);
+    }
+
+    if (!result) {
+      console.log(`[WPP] Falha na validação. Tentando envio forçado para: ${cleanNumber}`);
+      try {
+        const jid = `${cleanNumber}@c.us`;
+        result = await this.client.sendText(jid, message);
+        console.log(`[WPP] Envio forçado funcionou!`);
+      } catch (forceError) {
+        console.error(`[WPP] Envio forçado também falhou: ${forceError.message}`);
+        throw new Error(`Contato não localizado no WhatsApp após 3 tentativas.`);
+      }
+    }
+
+    return result;
   }
 }
 

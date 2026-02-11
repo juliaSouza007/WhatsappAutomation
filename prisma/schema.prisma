@@ -48,6 +48,7 @@ model MessageQueue {
   phone       String
   message     String
   scheduledAt DateTime
-  status      String   @default("PENDING") // PENDING, SENT, ERROR
+  status      String   @default("PENDING")
+  metadata    String?
   createdAt   DateTime @default(now())
 }

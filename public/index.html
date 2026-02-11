@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <title>WhatsApp Automation Dashboard</title>
+    <link rel="icon" type="image/x-icon"
+        href="https://png.pngtree.com/png-clipart/20190516/original/pngtree-whatsapp-icon-png-image_3584844.jpg">
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 900px;
+            margin: 20px auto;
+            background: #f4f4f9;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #075e54;
+            color: white;
+        }
+
+        .status-SENT {
+            color: green;
+            font-weight: bold;
+        }
+
+        .status-PENDING {
+            color: orange;
+        }
+
+        .btn {
+            background: #25d366;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            margin: 10px 0;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Painel de Automação WhatsApp</h1>
+
+    <div class="card" style="border-left: 5px solid #17dc87;">
+        <h3>1. Importar Contatos (CSV)</h3>
+        <input type="file" id="csvFile" accept=".csv">
+        <button class="btn" onclick="importCSV()">Subir Lista</button>
+    </div>
+
+    <div class="card" style="border-left: 5px solid #17dc87;">
+        <h3>2. Nova Campanha (Disparo Simples)</h3>
+        <textarea id="msg" placeholder="Mensagem da campanha..."></textarea>
+        <div style="display: flex; gap: 10px;">
+            <input type="number" id="min" placeholder="Delay Min (s)" value="10">
+            <input type="number" id="max" placeholder="Delay Max (s)" value="30">
+        </div>
+        <button class="btn" onclick="startCampaign()">Disparar Campanha</button>
+    </div>
+
+    <div class="card" style="border-left: 5px solid #17dc87;">
+        <h3>3. Status das Mensagens (Fila de Envio)</h3>
+        <button class="btn" onclick="loadQueue()">Atualizar Status</button>
+        <table id="queueTable">
+            <thead>
+                <tr>
+                    <th>Telefone</th>
+                    <th>Mensagem</th>
+                    <th>Agendado para</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="card" style="border-left: 5px solid #17dc87;">
+        <h3>4. Entrada no Fluxo Automático</h3>
+        <p>Isso iniciará a sequência de mensagens (Msg 1, Msg 2 em +2min, Msg 3 em +5min) para TODOS os contatos.</p>
+        <input type="text" id="flowIdInput" placeholder="ID do Fluxo (ex: 1)">
+        <button class="btn" onclick="addListToFlow()">Adicionar Lista ao Fluxo</button>
+    </div>
+
+    <script>
+        async function importCSV() {
+            const fileInput = document.getElementById('csvFile');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const res = await fetch('/import-contacts', { method: 'POST', body: formData });
+            const data = await res.json();
+            alert(data.message || data.error);
+        }
+
+        async function startCampaign() {
+            const body = {
+                message: document.getElementById('msg').value,
+                minDelay: parseInt(document.getElementById('min').value),
+                maxDelay: parseInt(document.getElementById('max').value)
+            };
+
+            const res = await fetch('/campaign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            alert(data.message);
+            loadQueue();
+        }
+
+        async function loadQueue() {
+            const res = await fetch('/queue-status'); 
+            const data = await res.json();
+            const tbody = document.querySelector('#queueTable tbody');
+            tbody.innerHTML = data.map(m => `
+                <tr>
+                    <td>${m.phone}</td>
+                    <td>${m.message}</td>
+                    <td>${new Date(m.scheduledAt).toLocaleTimeString()}</td>
+                    <td class="status-${m.status}">${m.status}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function addListToFlow() {
+            const flowId = document.getElementById('flowIdInput').value;
+            if (!flowId) return alert('Por favor, informe o ID do Fluxo.');
+
+            const res = await fetch('/start-flow', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // Envia o flowId como ele sai do input (string)
+                body: JSON.stringify({ flowId: flowId })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                alert(data.message);
+                loadQueue();
+            } else {
+                alert('Erro: ' + data.error);
+            }
+        }
+
+        // Atualiza a cada 5 segundos
+        setInterval(loadQueue, 5000);
+        window.onload = loadQueue;
+    </script>
+</body>
+
+</html>
