@@ -23,8 +23,9 @@ app.post('/import-contacts', upload.single('file'), (req, res) => {
         .on('end', async () => {
             try {
                 for (const row of results) {
-                    // Limpeza para evitar erros de LID: remove tudo que não é dígito
-                    const cleanPhone = row.phone.trim().replace(/\D/g, '');
+                    // Limpeza bruta na entrada: remove letras, espaços, traços, parênteses
+                    const cleanPhone = row.phone ? row.phone.toString().replace(/\D/g, '') : '';
+                    
                     if (!cleanPhone) continue;
 
                     await prisma.contact.upsert({
@@ -34,9 +35,10 @@ app.post('/import-contacts', upload.single('file'), (req, res) => {
                     });
                 }
                 fs.unlinkSync(req.file.path);
-                res.json({ message: `${results.length} contatos importados!` });
+                res.json({ message: `${results.length} contatos processados com sucesso!` });
             } catch (err) {
-                res.status(500).json({ error: 'Erro ao salvar no banco.' });
+                console.error(err);
+                res.status(500).json({ error: 'Erro ao salvar no banco de dados.' });
             }
         });
 });
@@ -46,26 +48,28 @@ app.post('/campaign', async (req, res) => {
     const { message, minDelay, maxDelay } = req.body;
     try {
         const contacts = await prisma.contact.findMany();
+        
         for (let i = 0; i < contacts.length; i++) {
             const randomDelay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
             const scheduledTime = new Date(Date.now() + (i * randomDelay * 1000));
 
             await prisma.messageQueue.create({
                 data: {
-                    phone: contacts[i].phone.trim(),
+                    // SEGURANÇA: Garante que vai para a fila apenas números
+                    phone: contacts[i].phone.replace(/\D/g, ''),
                     message: message,
                     scheduledAt: scheduledTime,
                     status: 'PENDING'
                 }
             });
         }
-        res.json({ message: `Campanha de ${contacts.length} mensagens agendada!` });
+        res.json({ message: `Campanha agendada para ${contacts.length} contatos.` });
     } catch (err) {
-        res.status(500).json({ error: 'Erro ao agendar campanha.' });
+        res.status(500).json({ error: 'Erro ao gerar campanha.' });
     }
 });
 
-// --- 3. STATUS DA FILA ---
+// --- 3. ROTA DE STATUS DA FILA (DASHBOARD) ---
 app.get('/queue-status', async (req, res) => {
     try {
         const queue = await prisma.messageQueue.findMany({
@@ -74,31 +78,40 @@ app.get('/queue-status', async (req, res) => {
         });
         res.json(queue);
     } catch (err) {
-        res.status(500).json({ error: 'Erro ao carregar fila.' });
+        res.status(500).json({ error: 'Erro ao buscar fila.' });
     }
 });
 
-// --- 4. ENTRADA NO FLUXO (REVISADO) ---
+// --- 4. ROTA DE ENTRADA NO FLUXO ---
 app.post('/start-flow', async (req, res) => {
     const { flowId } = req.body; 
+    
     try {
         const flowIdStr = String(flowId);
         const contacts = await prisma.contact.findMany();
 
-        if (contacts.length === 0) return res.status(404).json({ error: 'Sem contatos!' });
+        if (contacts.length === 0) {
+            return res.status(404).json({ error: 'Nenhum contato encontrado no banco.' });
+        }
 
         const firstStep = await prisma.flowStep.findFirst({
-            where: { flowId: flowIdStr, order: 1 }
+            where: { 
+                flowId: flowIdStr, 
+                order: 1 
+            }
         });
 
-        if (!firstStep) return res.status(404).json({ error: 'Fluxo ou Passo 1 não encontrado.' });
+        if (!firstStep) {
+            return res.status(404).json({ error: 'Fluxo ou Passo 1 não encontrado.' });
+        }
 
         const tasks = contacts.map(contact => {
             return prisma.messageQueue.create({
                 data: {
-                    phone: contact.phone.trim(), // Remove espaços que causam No LID
+                    // SEGURANÇA: .replace(/\D/g, '') remove espaços internos (ex: 55 31...)
+                    phone: contact.phone.replace(/\D/g, ''), 
                     message: firstStep.message,
-                    scheduledAt: new Date(),
+                    scheduledAt: new Date(), 
                     status: 'PENDING',
                     metadata: JSON.stringify({ flowId: flowIdStr, stepOrder: 1 })
                 }
@@ -106,10 +119,13 @@ app.post('/start-flow', async (req, res) => {
         });
 
         await Promise.all(tasks);
-        res.json({ message: `Fluxo "${flowIdStr}" iniciado para ${contacts.length} contatos.` });
+
+        res.json({ message: `Sucesso! Fluxo "${flowIdStr}" iniciado para ${tasks.length} contatos.` });
+
     } catch (error) {
-        console.error('[ERRO START-FLOW]', error);
-        res.status(500).json({ error: 'Erro interno. Verifique se a coluna metadata existe no banco.' });
+        console.error('--- ERRO CRÍTICO NO START-FLOW ---');
+        console.error(error);
+        res.status(500).json({ error: 'Erro interno ao processar fluxo.' });
     }
 });
 

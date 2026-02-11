@@ -16,7 +16,7 @@ async function main() {
         create: [
           {
             order: 1,
-            message: "Olá {nome}! Você acabou de entrar no nosso fluxo.",
+            message: "Olá {name}! Você acabou de entrar no nosso fluxo.",
             delayMinutes: 0
           },
           {

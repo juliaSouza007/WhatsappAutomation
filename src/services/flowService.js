@@ -2,7 +2,7 @@
 import { prisma } from '../lib/prisma.js';
 
 export const flowService = {
-  // Inicia para a lista inteira (Escalável - Regra 4)
+  // Inicia para a lista inteira (Escalável)
   async addFullListToFlow(flowId) {
     const contacts = await prisma.contact.findMany();
     
@@ -13,7 +13,7 @@ export const flowService = {
     return contacts.length;
   },
 
-  // Cria a execução individual (Regra 3)
+  // Cria a execução individual
   async startFlowForContact(phone, flowId) {
     const flow = await prisma.flow.findUnique({
       where: { id: flowId },
