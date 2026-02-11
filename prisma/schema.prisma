@@ -1,0 +1,53 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  executions FlowExecution[]
+}
+
+model Flow {
+  id        String     @id @default(uuid())
+  name      String
+  steps     FlowStep[]
+  executions FlowExecution[]
+}
+
+model FlowStep {
+  id           String @id @default(uuid())
+  flowId       String
+  message      String
+  delayMinutes Int    // Tempo de espera após o passo anterior
+  order        Int    // 1, 2, 3...
+  flow         Flow   @relation(fields: [flowId], references: [id])
+}
+
+model FlowExecution {
+  id            String   @id @default(uuid())
+  contactId     String
+  flowId        String
+  currentStepId String?
+  nextRunAt     DateTime
+  status        String   @default("RUNNING") // RUNNING, COMPLETED, PAUSED
+  contact       Contact  @relation(fields: [contactId], references: [id])
+  flow          Flow     @relation(fields: [flowId], references: [id])
+}
+
+model MessageQueue {
+  id          Int      @id @default(autoincrement())
+  phone       String
+  message     String
+  scheduledAt DateTime
+  status      String   @default("PENDING") // PENDING, SENT, ERROR
+  createdAt   DateTime @default(now())
+}
