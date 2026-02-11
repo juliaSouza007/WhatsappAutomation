@@ -1,34 +1,41 @@
 // src/services/flowService.js
 import { prisma } from '../lib/prisma.js';
 
-export async function enrollListInFlow(flowId) {
-  const contacts = await prisma.contact.findMany();
-  const firstStep = await prisma.flowStep.findFirst({
-    where: { flowId, order: 1 }
+export async function enrollContactInFlow(phone, flowId) {
+  const flow = await prisma.flow.findUnique({
+    where: { id: flowId },
+    include: { steps: true }
   });
 
-  if (!firstStep) throw new Error("Fluxo sem passos configurados.");
+  const firstStep = flow.steps.find(s => s.order === 1);
 
-  for (const contact of contacts) {
-    // 1. Cria a execução do fluxo
-    const execution = await prisma.flowExecution.create({
-      data: {
-        contactId: contact.id,
-        flowId,
-        currentStepId: firstStep.id,
-        nextRunAt: new Date(),
-        status: 'RUNNING'
-      }
-    });
+  // 1. Cria ou busca o contato
+  const contact = await prisma.contact.upsert({
+    where: { phone },
+    update: {},
+    create: { phone, name: 'Lead Teste' }
+  });
 
-    // 2. Coloca a primeira mensagem na fila do banco
-    await prisma.messageQueue.create({
-      data: {
-        phone: contact.phone,
-        message: firstStep.message,
-        scheduledAt: new Date(), // Enviar agora
-        // Vincula opcionalmente via metadados ou apenas deixa o worker processar
-      }
-    });
-  }
+  // 2. Inicia a execução
+  await prisma.flowExecution.create({
+    data: {
+      contactId: contact.id,
+      flowId: flowId,
+      currentStepId: firstStep.id,
+      nextRunAt: new Date(),
+      status: 'RUNNING'
+    }
+  });
+
+  // 3. Coloca a primeira mensagem na fila imediata
+  await prisma.messageQueue.create({
+    data: {
+      phone: phone,
+      message: firstStep.message,
+      scheduledAt: new Date(),
+      status: 'PENDING'
+    }
+  });
+
+  console.log(`Contato ${phone} entrou no fluxo!`);
 }
