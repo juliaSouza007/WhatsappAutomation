@@ -81,7 +81,9 @@
         <h3>2. Nova Campanha (Disparo Simples)</h3>
         <textarea id="msg" placeholder="Mensagem da campanha..."></textarea>
         <div style="display: flex; gap: 10px;">
-            <input type="number" id="min" placeholder="Delay Min (s)" value="10">
+            <p>Delay min(s)</p>
+            <input type="number" id="min" placeholder="Delay Min (s)" value="10"><br>
+            <p>Delay max(s)</p>
             <input type="number" id="max" placeholder="Delay Max (s)" value="30">
         </div>
         <button class="btn" onclick="startCampaign()">Disparar Campanha</button>
@@ -93,7 +95,7 @@
         <table id="queueTable">
             <thead>
                 <tr>
-                    <th>Telefone</th>
+                    <th>Nome</th>
                     <th>Mensagem</th>
                     <th>Agendado para</th>
                     <th>Status</th>
@@ -105,77 +107,42 @@
 
     <div class="card" style="border-left: 5px solid #17dc87;">
         <h3>4. Entrada no Fluxo Automático</h3>
-        <p>Isso iniciará a sequência de mensagens (Msg 1, Msg 2 em +2min, Msg 3 em +5min) para TODOS os contatos.</p>
-        <input type="text" id="flowIdInput" placeholder="ID do Fluxo (ex: 1)">
-        <button class="btn" onclick="addListToFlow()">Adicionar Lista ao Fluxo</button>
+        <p>Selecione um fluxo para enviar a todos os contatos:</p>
+
+        <select id="flowSelect" style="padding: 10px; width: 100%; margin-bottom: 10px;">
+            <option value="">A carregar fluxos...</option>
+        </select>
+
+        <button onclick="startSelectedFlow()"
+            style="background-color: #25d366; color: white; padding: 10px 20px; border: none; cursor: pointer;">
+            Iniciar Fluxo para Todos
+        </button>
     </div>
 
-    <script>
-        async function importCSV() {
-            const fileInput = document.getElementById('csvFile');
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+    <div class="card" style="border-left: 5px solid #17dc87;">
+        <h3>5. Criar Fluxo de 3 Etapas</h3>
+        <input type="text" id="flowName" placeholder="Nome do Fluxo (ex: Boas Vindas)">
 
-            const res = await fetch('/import-contacts', { method: 'POST', body: formData });
-            const data = await res.json();
-            alert(data.message || data.error);
-        }
+        <div class="step">
+            <h4>Passo 1 (Imediato)</h4>
+            <textarea id="msg1" placeholder="Mensagem 1"></textarea>
+        </div>
 
-        async function startCampaign() {
-            const body = {
-                message: document.getElementById('msg').value,
-                minDelay: parseInt(document.getElementById('min').value),
-                maxDelay: parseInt(document.getElementById('max').value)
-            };
+        <div class="step">
+            <h4>Passo 2</h4>
+            <input type="number" id="delay2" placeholder="Minutos após passo 1">
+            <textarea id="msg2" placeholder="Mensagem 2"></textarea>
+        </div>
 
-            const res = await fetch('/campaign', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            const data = await res.json();
-            alert(data.message);
-            loadQueue();
-        }
+        <div class="step">
+            <h4>Passo 3</h4>
+            <input type="number" id="delay3" placeholder="Minutos após passo 2">
+            <textarea id="msg3" placeholder="Mensagem 3"></textarea>
+        </div>
 
-        async function loadQueue() {
-            const res = await fetch('/queue-status'); 
-            const data = await res.json();
-            const tbody = document.querySelector('#queueTable tbody');
-            tbody.innerHTML = data.map(m => `
-                <tr>
-                    <td>${m.phone}</td>
-                    <td>${m.message}</td>
-                    <td>${new Date(m.scheduledAt).toLocaleTimeString()}</td>
-                    <td class="status-${m.status}">${m.status}</td>
-                </tr>
-            `).join('');
-        }
+        <button onclick="saveFlow()">Salvar e Ativar Fluxo</button>
+    </div>
 
-        async function addListToFlow() {
-            const flowId = document.getElementById('flowIdInput').value;
-            if (!flowId) return alert('Por favor, informe o ID do Fluxo.');
-
-            const res = await fetch('/start-flow', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                // Envia o flowId como ele sai do input (string)
-                body: JSON.stringify({ flowId: flowId })
-            });
-
-            const data = await res.json();
-            if (res.ok) {
-                alert(data.message);
-                loadQueue();
-            } else {
-                alert('Erro: ' + data.error);
-            }
-        }
-
-        // Atualiza a cada 5 segundos
-        setInterval(loadQueue, 5000);
-        window.onload = loadQueue;
-    </script>
+    <script src="script.js"></script>
 </body>
-
 </html>

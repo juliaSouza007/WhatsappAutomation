@@ -129,4 +129,44 @@ app.post('/start-flow', async (req, res) => {
     }
 });
 
+// --- 5. CRIAR NOVO FLUXO PERSONALIZADO ---
+app.post('/create-flow', async (req, res) => {
+    const { name, steps } = req.body; // steps deve ser um array de 3 objetos
+
+    try {
+        const newFlow = await prisma.flow.create({
+            data: {
+                name: name,
+                steps: {
+                    create: steps.map((step, index) => ({
+                        message: step.message,
+                        delayMinutes: parseInt(step.delayMinutes),
+                        order: index + 1
+                    }))
+                }
+            }
+        });
+
+        res.json({ message: 'Fluxo criado com sucesso!', flowId: newFlow.id });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao criar fluxo.' });
+    }
+});
+
+// Rota para listar fluxos existentes (para o usuário escolher no SELECT)
+// Rota para o Select: Retorna apenas ID e Nome
+app.get('/flows', async (req, res) => {
+    try {
+        const flows = await prisma.flow.findMany({
+            select: {
+                id: true,
+                name: true
+            }
+        });
+        res.json(flows);
+    } catch (err) {
+        res.status(500).json({ error: 'Erro ao listar fluxos.' });
+    }
+});
+
 export default app;
