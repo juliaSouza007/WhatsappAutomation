@@ -1,9 +1,28 @@
+// src/app.js
 import express from 'express';
+import multer from 'multer';
+import { importContactsFromCSV } from './services/importService.js';
 import { enrollContactInFlow } from './services/flowService.js';
 import { prisma } from './lib/prisma.js';
 
 const app = express();
+const upload = multer({ dest: 'uploads/' });
+
 app.use(express.json());
+
+// 1. Rota de Importação de CSV
+app.post('/import', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "Por favor, envie um arquivo CSV." });
+  }
+
+  try {
+    const count = await importContactsFromCSV(req.file.path);
+    res.json({ message: `${count} contatos processados com sucesso.` });
+  } catch (error) {
+    res.status(500).json({ error: "Erro ao processar CSV: " + error.message });
+  }
+});
 
 // ROTA DE TESTE: Inicia o fluxo para um número específico
 app.get('/teste-fluxo', async (req, res) => {

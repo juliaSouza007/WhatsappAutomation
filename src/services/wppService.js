@@ -15,6 +15,10 @@ class WppService {
         headless: true,
         debug: false,
         waitForLogin: true,
+        disableWelcome: true, 
+        updatesLog: false,     
+        autoClose: 0,         
+        tokenStore: 'file',  
       });
       return this.client;
     } catch (error) {

@@ -3,33 +3,47 @@ import { prisma } from '../lib/prisma.js';
 import { wppService } from '../services/wppService.js';
 
 export const setupWorker = () => {
-  console.log('--- Worker de Fluxo Ativado (Check a cada 10s) ---');
+  console.log('--- Worker de Fluxo Ativado (Monitorando a cada 10s) ---');
 
   setInterval(async () => {
     try {
+      // 1. Verificação de Conexão: Se o cliente não existe ou não está conectado, nem busca no banco
+      if (!wppService.client) {
+        console.log('[Worker] Aguardando inicialização do WhatsApp...');
+        return;
+      }
+
+      const isConnected = await wppService.client.isConnected();
+      if (!isConnected) {
+        console.log('[Worker] WhatsApp desconectado. Aguardando reconexão...');
+        return;
+      }
+
       const now = new Date();
       
-      // 1. Busca mensagens que precisam ser enviadas AGORA
+      // 2. Busca mensagens que precisam ser enviadas AGORA (ou que já passaram da hora)
       const pendingMessages = await prisma.messageQueue.findMany({
         where: { 
           status: 'PENDING', 
           scheduledAt: { lte: now } 
         },
-        take: 5 // Processa em pequenos lotes
+        take: 5 
       });
 
       for (const msg of pendingMessages) {
         try {
-          console.log(`[Worker] Tentando enviar Mensagem para ${msg.phone}...`);
+          console.log(`[Worker] Enviando mensagem programada para: ${msg.phone}`);
+          
+          // Envia a mensagem
           await wppService.sendMessage(msg.phone, msg.message);
           
-          // Marca como enviada
+          // Marca como enviada no banco de dados
           await prisma.messageQueue.update({
             where: { id: msg.id },
             data: { status: 'SENT' }
           });
 
-          // 2. Lógica de Sequência: Verifica se existe uma execução de fluxo ativa
+          // 3. Gerenciamento do Fluxo (Agenda o próximo passo)
           const execution = await prisma.flowExecution.findFirst({
             where: { 
               contact: { phone: msg.phone },
@@ -44,9 +58,10 @@ export const setupWorker = () => {
             const nextStep = steps[currentStepIndex + 1];
 
             if (nextStep) {
-              // AGENDA A PRÓXIMA MENSAGEM (Temporizador)
-              const nextRun = new Date(now.getTime() + nextStep.delayMinutes * 60000);
+              // Calcula o tempo exato: Agora + minutos definidos no passo
+              const nextRun = new Date(Date.now() + nextStep.delayMinutes * 60000);
               
+              // Cria a próxima mensagem na fila
               await prisma.messageQueue.create({
                 data: {
                   phone: msg.phone,
@@ -56,6 +71,7 @@ export const setupWorker = () => {
                 }
               });
 
+              // Atualiza o rastreio da execução do fluxo
               await prisma.flowExecution.update({
                 where: { id: execution.id },
                 data: { 
@@ -63,23 +79,28 @@ export const setupWorker = () => {
                   nextRunAt: nextRun 
                 }
               });
-              console.log(`[Worker] Próximo passo agendado para: ${nextRun.toLocaleTimeString()}`);
+              
+              console.log(`[Worker] Sucesso! Próximo passo (${nextStep.order}) agendado para ${nextRun.toLocaleTimeString()}`);
             } else {
-              // Fim do fluxo para este contato
+              // Se não houver mais passos, finaliza o fluxo
               await prisma.flowExecution.update({
                 where: { id: execution.id },
                 data: { status: 'COMPLETED' }
               });
-              console.log(`[Worker] Fluxo finalizado para ${msg.phone}`);
+              console.log(`[Worker] Fluxo concluído com sucesso para ${msg.phone}`);
             }
           }
         } catch (err) {
-          console.error(`[Worker] Erro ao processar mensagem ${msg.id}:`, err.message);
-          // Marca como ERROR para não tentar infinitamente
+          console.error(`[Worker] Falha ao enviar para ${msg.phone}:`, err.message);
+          // Marca como 'ERROR' no banco para parar de tentar
+            await prisma.messageQueue.update({
+                where: { id: msg.id },
+                data: { status: 'ERROR' }
+            });
         }
       }
     } catch (error) {
-      console.error('[Worker] Erro crítico no loop:', error);
+      console.error('[Worker] Erro crítico no loop de processamento:', error);
     }
-  }, 10000); // Verifica a cada 10 segundos
+  }, 10000); // Roda a cada 10 segundos
 };

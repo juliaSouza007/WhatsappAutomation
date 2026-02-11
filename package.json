@@ -1,27 +1,23 @@
 {
-  "name": "whatsapp-flow-manager",
+  "name": "whatsapp-automation",
   "version": "1.0.0",
-  "description": "Desafio Técnico - Disparador WhatsApp com Fluxos",
+  "description": "Automação de fluxos de mensagens WhatsApp",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "worker": "nodemon src/worker.js",
+    "start": "node src/server.js",
     "seed": "node prisma/seed.js",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "dev": "nodemon src/server.js"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0",
-    "@wppconnect-team/wppconnect": "^1.30.0",
-    "bullmq": "^4.12.0",
+    "@wppconnect-team/wppconnect": "latest",
     "csv-parser": "^3.0.0",
-    "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1",
-    "prisma": "^5.0.0"
+    "prisma": "^5.0.0",
+    "nodemon": "^3.0.0"
   }
 }
